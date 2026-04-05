@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Login</title>
+<link rel="stylesheet" href="static/style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<div class="login-container">
+    <div class="brand-side">
+        <div class="logo-placeholder">
+            Slogan and Logo
+        </div>
+    </div>
+
+    <div class="form-side">
+        <h2>ADMIN LOGIN</h2>
+        <form id="adminLoginForm">
+            <div class="input-group">
+                <i class="fa-solid fa-user"></i>
+                <input type="email" id="email" placeholder="Enter Admin Email" required>
+            </div>
+            <div class="input-group">
+                <i class="fa-solid fa-lock"></i>
+                <input type="password" id="password" placeholder="Enter Password" required>
+            </div>
+
+            <button type="submit" class="login-btn">LOGIN</button>
+            <div class="message_box"></div>
+        </form>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+
+// Firebase config
+const firebaseConfig = {
+    apiKey: "AIzaSyA3Edd-rX55dCqqziDEwkasHIdqpXcA5rk",
+    authDomain: "cap1-28af8.firebaseapp.com",
+    projectId: "cap1-28af8",
+    storageBucket: "cap1-28af8.appspot.com",
+    messagingSenderId: "720727154833",
+    appId: "1:720727154833:web:3acb89547c1b665583df30"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth();
+
+const loginForm = document.getElementById("adminLoginForm");
+const message = document.querySelector(".message_box");
+
+loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    message.textContent = "";
+    message.className = "message_box";
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+        // Sign in with Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Get ID token
+        const idToken = await user.getIdToken(true);
+
+        // Send to Flask to verify role
+        const response = await fetch("/admin_login_verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken })
+        });
+
+        const result = await response.json();
+        if (response.ok && result.message === "Admin login successful") {
+            // Redirect to admin dashboard
+            window.location.href = "/adminboard";
+        } else {
+            message.classList.add("error");
+            message.textContent = result.error || "You are not an admin.";
+        }
+
+    } catch (error) {
+        console.error(error);
+        message.classList.add("error");
+        message.textContent = "Incorrect email or password.";
+    }
+});
+</script>
+
+</body>
+</html>

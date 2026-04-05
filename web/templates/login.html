@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modern Login Page</title>
+<link rel="stylesheet" href="static/style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<div class="login-container">
+    <div class="brand-side">
+        <div class="logo-placeholder">
+            LOGO AND SLOGAN
+        </div>
+    </div>
+
+    <div class="form-side">
+        <h2>LOGIN</h2>
+        <form id="loginForm">
+            <div class="input-group">
+                <i class="fa-solid fa-user"></i>
+                <input type="email" id="email" placeholder="Enter Email" required>
+            </div>
+            <div class="input-group">
+                <i class="fa-solid fa-lock"></i>
+                <input type="password" id="password" placeholder="Enter Password" required>
+            </div>
+            <a href="/forgot_password" id="forgotPassword" class="forgot-link">FORGOT PASSWORD?</a>
+            <button type="submit" class="login-btn">LOGIN</button>
+            <div class="message_box"></div>
+        </form>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-analytics.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+
+// Firebase config
+const firebaseConfig = {
+    apiKey: "AIzaSyA3Edd-rX55dCqqziDEwkasHIdqpXcA5rk",
+    authDomain: "cap1-28af8.firebaseapp.com",
+    projectId: "cap1-28af8",
+    storageBucket: "cap1-28af8.appspot.com",
+    messagingSenderId: "720727154833",
+    appId: "1:720727154833:web:3acb89547c1b665583df30",
+    measurementId: "G-MEE0QVLHQP"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth();
+
+const loginForm = document.getElementById("loginForm");
+const message = document.querySelector(".message_box");
+
+// Helper: get token with forced refresh and retry
+async function getTokenWithRetry(user, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const token = await user.getIdToken(true); // force refresh
+            return token;
+        } catch (err) {
+            console.warn("Token fetch failed, retrying...", err.message);
+            await new Promise(r => setTimeout(r, 500)); // wait 0.5s
+        }
+    }
+    throw new Error("Unable to get valid ID token");
+}
+
+// Handle login
+loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    message.textContent = "";
+    message.className = "message_box";
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        message.classList.add("success");
+        message.textContent = "Login successful, verifying...";
+
+        const idToken = await getTokenWithRetry(user);
+        console.log("ID Token:", idToken);
+
+        const response = await fetch("/firebase_login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken })
+        });
+
+        if (response.ok) {
+            window.location.href = "/dashboard";
+        } else {
+            const text = await response.text();
+            console.error("Server login failed:", text);
+            message.classList.add("error");
+            message.textContent = "Login failed on server: " + text;
+        }
+
+    } catch (error) {
+        console.error("Login error:", error.message);
+        message.classList.add("error");
+        message.textContent = "Incorrect email or password. " + error.message;
+    }
+});
+</script>

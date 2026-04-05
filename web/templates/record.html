@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patient List</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+/* ====== STYLES ====== */
+.patient-card { background: #f8f8f8; padding: 10px; margin-bottom: 10px; border-radius: 5px; display:flex; justify-content: space-between; align-items:center; }
+.view-details-btn { padding: 5px 10px; cursor:pointer; }
+.modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); justify-content:center; align-items:flex-start; overflow:auto; }
+.modal-content { background:#fff; border-radius:10px; padding:30px; margin:5% auto; width:90%; max-width:700px; position:relative; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.2);}
+.close-btn { position:absolute; top:10px; right:15px; font-size:24px; cursor:pointer; }
+.visit-item { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.add-new-btn { margin-top:10px; padding:5px 10px; cursor:pointer; }
+.modal-footer { margin-top:15px; text-align:right; }
+textarea { width: 100%; min-height: 60px; margin-bottom: 10px; }
+input, textarea { padding:5px; margin-bottom:10px; width:100%; box-sizing:border-box; }
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.finding-text { text-align:left; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+
+<header class="navbar">
+    <div class="logo">LOGO</div>
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('dashboard') }}">Home</a></li>
+            <li><a href="#" class="active">Patients</a></li>
+            <li><a href="{{ url_for('schedule') }}">Schedule</a></li>
+            <li class="dropdown">
+                <a href="#" class="dropbtn">Profile</a>
+                <div class="dropdown-content">
+                    <a href="{{ url_for('settings') }}">Settings</a>
+                    <a href="{{ url_for('login') }}">Logout</a>
+                </div>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+<main class="patient-list-container">
+    <div class="list-header">
+        <h1>Patient List</h1>
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search ...">
+            <i class="fa-solid fa-search"></i>
+        </div>
+    </div>
+
+    <div class="patient-grid" id="patientGrid"></div>
+
+    <!-- Patient Info Modal -->
+    <div id="patientModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Patient Info & Findings</h2>
+            <h1 class="patient-name"></h1>
+            <div class="visit-history" id="visitContainer"></div>
+            <div class="modal-footer">
+                <button id="addNewBtn" class="add-new-btn">Add New</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Record Modal -->
+    <div id="addRecordModal" class="modal">
+        <div class="modal-content">
+            <span class="close-add-record">&times;</span>
+            <h2>New Record</h2>
+            <form id="addRecordForm">
+                <h3>I. PATIENT INFORMATION</h3>
+                <input type="text" name="name" placeholder="Name" required>
+                <input type="text" name="age" placeholder="Age">
+                <input type="text" name="sex" placeholder="Sex">
+                <input type="text" name="address" placeholder="Address">
+                <input type="text" name="civil_status" placeholder="Civil Status">
+                <input type="text" name="occupation" placeholder="Occupation">
+
+                <h3>II. VITAL SIGNS</h3>
+                <input type="number" name="bp" placeholder="Blood Pressure" step="0.1">
+                <input type="number" name="cr" placeholder="Cardiac Rate" step="0.1">
+                <input type="number" name="rr" placeholder="Respiratory Rate" step="0.1">
+                <input type="number" name="spo2" placeholder="Oxygen Saturation" step="0.1">
+                <input type="number" name="temp" placeholder="Temperature" step="0.1">
+
+                <h3>III. SUBJECTIVE FINDINGS</h3>
+                <textarea name="subjective" placeholder="Subjective Findings"></textarea>
+
+                <h3>IV. PHYSICAL EXAMINATION</h3>
+                <textarea name="physical_exam" placeholder="Physical Exam"></textarea>
+
+                <h3>V. DIAGNOSIS</h3>
+                <textarea name="diagnosis" placeholder="Working impression / diagnosis"></textarea>
+
+                <h3>VI. THERAPEUTIC PLAN</h3>
+                <textarea name="therapeutic_plan" placeholder="Therapeutic Plan"></textarea>
+
+                <h3>Follow-up date</h3>
+                <input type="date" name="follow_up">
+
+                <button type="submit">Save Record</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Visit Detail Modal -->
+    <div id="visitModal" class="modal">
+        <div class="modal-content">
+            <span class="close-visit">&times;</span>
+            <div id="visitDetails"></div>
+        </div>
+    </div>
+
+</main>
+
+<script>
+const patientGrid = document.getElementById("patientGrid");
+const patientModal = document.getElementById("patientModal");
+const closePatient = document.querySelector(".close-btn");
+const visitContainer = document.getElementById("visitContainer");
+
+const addNewBtn = document.getElementById("addNewBtn");
+const addRecordModal = document.getElementById("addRecordModal");
+const closeAddRecord = document.querySelector(".close-add-record");
+const addRecordForm = document.getElementById("addRecordForm");
+
+const visitModal = document.getElementById("visitModal");
+const visitDetails = document.getElementById("visitDetails");
+const closeVisit = document.querySelector(".close-visit");
+
+const searchInput = document.getElementById("searchInput");
+
+let currentPatient = null;
+
+// Load patients dynamically
+async function loadPatients(){
+    try {
+        const res = await fetch("/api/get_patients");
+        const patients = await res.json();
+        patientGrid.innerHTML = "";
+
+        patients.forEach(patient => {
+            // Ensure fields are not null
+            patient.name = patient.name || "-";
+            patient.age = patient.age || "-";
+            patient.sex = patient.sex || "-";
+            patient.address = patient.address || "-";
+            patient.civil_status = patient.civil_status || "-";
+            patient.occupation = patient.occupation || "-";
+
+            const card = document.createElement("div");
+            card.className = "patient-card";
+            card.innerHTML = `
+                <span>${patient.name}</span>
+                <button class="view-details-btn">View Details</button>
+            `;
+            card.querySelector("button").onclick = () => openPatientModal(patient);
+            patientGrid.appendChild(card);
+        });
+    } catch (err) {
+        patientGrid.innerHTML = "<p>Error loading patients</p>";
+        console.error(err);
+    }
+}
+
+// Open patient modal
+async function openPatientModal(patient){
+    currentPatient = patient;
+    document.querySelector(".patient-name").textContent = patient.name;
+    patientModal.style.display = "flex";
+    visitContainer.innerHTML = "<p>Loading records...</p>";
+
+    try {
+        const res = await fetch(`/api/get_patient_records/${patient.id}`);
+        const records = await res.json();
+
+        if(records.length === 0){
+            visitContainer.innerHTML = "<p>No records yet</p>";
+            return;
+        }
+
+        visitContainer.innerHTML = "";
+
+        records.forEach(record => {
+            const div = document.createElement("div");
+            div.className = "visit-item";
+
+            const lastVisit = document.createElement("span");
+            let date = null;
+            if (record.created_at) {
+                date = new Date(record.created_at);
+            }
+
+            lastVisit.textContent = date
+                ? `Last Visit: ${date.toLocaleDateString()} - ${date.toLocaleTimeString()}`
+                : "Last Visit: -";
+
+            const viewBtn = document.createElement("button");
+            viewBtn.textContent = "View";
+            viewBtn.onclick = () => viewVisit(record);
+
+            div.appendChild(lastVisit);
+            div.appendChild(viewBtn);
+            visitContainer.appendChild(div);
+        });
+
+    } catch (err) {
+        visitContainer.innerHTML = "<p>Error loading records</p>";
+        console.error(err);
+    }
+}
+
+// Open Add Record modal
+addNewBtn.onclick = ()=> {
+    addRecordModal.style.display = "flex";
+    addRecordForm.name.value = currentPatient?.name || "";
+    addRecordForm.age.value = currentPatient?.age || "";
+    addRecordForm.sex.value = currentPatient?.sex || "";
+    addRecordForm.address.value = currentPatient?.address || "";
+    addRecordForm.civil_status.value = currentPatient?.civil_status || "";
+    addRecordForm.occupation.value = currentPatient?.occupation || "";
+}
+
+// Close modals
+closePatient.onclick = ()=>patientModal.style.display="none";
+closeVisit.onclick = ()=>visitModal.style.display="none";
+closeAddRecord.onclick = ()=>addRecordModal.style.display="none";
+window.onclick = (e)=> {
+    if(e.target==patientModal) patientModal.style.display="none";
+    if(e.target==visitModal) visitModal.style.display="none";
+    if(e.target==addRecordModal) addRecordModal.style.display="none";
+}
+
+// Save new record
+addRecordForm.onsubmit = async (e)=> {
+    e.preventDefault();
+    const formData = Object.fromEntries(new FormData(addRecordForm));
+
+    const data = {
+        patient_id: currentPatient.id,
+        name: formData.name,
+        age: formData.age,
+        sex: formData.sex,
+        address: formData.address,
+        civil_status: formData.civil_status,
+        occupation: formData.occupation,
+        vital_signs: {
+            bp: formData.bp ? parseInt(formData.bp) : 0,
+            rr: formData.rr ? parseInt(formData.rr) : 0,
+            cr: formData.cr ? parseInt(formData.cr) : 0,
+            spo2: formData.spo2 ? parseInt(formData.spo2) : 0,
+            temp: formData.temp ? parseFloat(formData.temp) : 0.0
+        },
+        subjective: formData.subjective,
+        physical_exam: formData.physical_exam,
+        diagnosis: formData.diagnosis,
+        therapeutic_plan: formData.therapeutic_plan,
+        follow_up: formData.follow_up
+    };
+
+    const res = await fetch("/api/save_record",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(data)
+    });
+
+    const result = await res.json();
+    if(res.ok){
+        alert(result.message);
+        addRecordModal.style.display="none";
+        openPatientModal(currentPatient);
+    } else {
+        alert("Error: " + result.error);
+    }
+}
+
+// View visit details
+function viewVisit(r){
+    visitDetails.innerHTML = `
+        <h3>I. PATIENT INFORMATION</h3>
+        <div class="info-grid">
+            <p><strong>Name:</strong> ${r.name || "-"}</p>
+            <p><strong>Age:</strong> ${r.age || "-"}</p>
+            <p><strong>Sex:</strong> ${r.sex || "-"}</p>
+            <p><strong>Address:</strong> ${r.address || "-"}</p>
+            <p><strong>Occupation:</strong> ${r.occupation || "-"}</p>
+            <p><strong>Civil Status:</strong> ${r.civil_status || "-"}</p>
+        </div>
+        <h3>II. VITAL SIGNS</h3>
+        <div class="info-grid">
+            <p><strong>BP:</strong> ${r.bp || "-"}</p>
+            <p><strong>RR:</strong> ${r.rr || "-"}</p>
+            <p><strong>CR:</strong> ${r.cr || "-"}</p>
+            <p><strong>Temp:</strong> ${r.temp || "-"}</p>
+            <p><strong>SpO₂:</strong> ${r.spo2 || "-"}</p>
+        </div>
+        <h3>III. SUBJECTIVE FINDINGS</h3>
+        <p class="finding-text">${r.subjective || "-"}</p>
+        <h3>IV. PHYSICAL EXAMINATION</h3>
+        <p class="finding-text">${r.physical_exam || "-"}</p>
+        <h3>V. DIAGNOSIS</h3>
+        <p class="finding-text">${r.diagnosis || "-"}</p>
+        <h3>VI. THERAPEUTIC PLAN</h3>
+        <p class="finding-text">${r.therapeutic_plan || "-"}</p>
+    `;
+    visitModal.style.display="flex";
+}
+
+// Search filter
+searchInput.addEventListener("input", ()=> {
+    const term = searchInput.value.toLowerCase();
+    document.querySelectorAll(".patient-card").forEach(card=>{
+        card.style.display = card.querySelector("span").textContent.toLowerCase().includes(term)?"flex":"none";
+    });
+});
+
+// Init
+loadPatients();
+</script>
+
+</body>
+</html>

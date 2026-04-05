@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Schedule</title>
+</head>
+<body>
+    <header class="navbar">
+        <div class="logo">LOGO</div>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('dashboard') }}">Home</a></li>
+                <li><a href="{{ url_for('record') }}">Patients</a></li>
+                <li><a href="#" class="active">Schedule</a></li>
+                <li class="dropdown">
+                    <a href="#" class="dropbtn">Profile </a>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('settings') }}">Settings</a>
+                        <a href="{{ url_for('login') }}">Logout</a>
+                    </div>
+                </li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="schedule-container">
+        <div class="appointments-section">
+            <div class="table-header">
+                <h2>Appointments</h2>
+                <input type="date" class="date-picker">
+            </div>
+            <table class="appointments-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Patient</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="4" style="text-align:center">Loading appointments...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+const scheduleTable = document.querySelector(".appointments-table tbody");
+const datePicker = document.querySelector(".date-picker");
+
+// Function to load appointments
+async function loadAppointments(date=null) {
+    try {
+        let url = "/api/get_schedule";
+        if (date) url += `?date=${date}`;
+
+        const res = await fetch(url);
+        const appointments = await res.json();
+
+        scheduleTable.innerHTML = "";
+
+        if (!appointments || appointments.length === 0) {
+            const row = document.createElement("tr");
+            row.innerHTML = `<td colspan="4" style="text-align:center">No appointments found</td>`;
+            scheduleTable.appendChild(row);
+            return;
+        }
+
+        appointments.forEach(app => {
+            const row = document.createElement("tr");
+            const status = app.status === "Done" ? "Done" : "Waiting";
+
+            row.innerHTML = `
+                <td>${app.date}</td>
+                <td>${app.patient}</td>
+                <td>${app.reason || "-"}</td>
+                <td>${status}</td>
+            `;
+            scheduleTable.appendChild(row);
+        });
+    } catch (err) {
+        console.error("Error fetching appointments:", err);
+        scheduleTable.innerHTML = `<tr><td colspan="4" style="text-align:center">Error loading appointments</td></tr>`;
+    }
+}
+
+// Load today's appointments initially
+const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+datePicker.value = today;
+loadAppointments(today);
+
+// Reload when date picker changes
+datePicker.addEventListener("change", e => {
+    const selectedDate = e.target.value;
+    loadAppointments(selectedDate);
+});
+</script>
+</body>
+</html>

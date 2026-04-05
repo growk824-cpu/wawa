@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Questionnaire Builder</title>
+<link rel="stylesheet" href="static/main.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<header class="navbar">
+    <div class="logo">LOGO</div>
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('dashboard') }}">Home</a></li>
+            <li><a href="{{ url_for('record') }}">Patients</a></li>
+            <li><a href="{{ url_for('schedule') }}">Schedule</a></li>
+            <li class="dropdown">
+                <a href="#" class="dropbtn">Profile </a>
+                <div class="dropdown-content">
+                    <a href="{{ url_for('settings') }}">Settings</a>
+                    <a href="{{ url_for('logout') }}">Logout</a>
+                </div>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+<div class="settings-header-wrapper">
+    <div class="settings-label">Settings</div>
+    <a href="/forgot_password">
+        <button class="btn-change-password">Change Password</button>
+    </a>
+</div>
+
+<div class="builder-container">
+    <h2 class="builder-title">Questionnaire Builder</h2>
+    <p class="builder-subtitle">Manage your questionnaire sections and fields</p>
+    
+    <hr class="builder-divider">
+
+    <button id="add-section-btn" class="btn-add-dashed"> Add New Section</button>
+
+    <!-- ✅ DEFAULT SECTION (LOCKED) -->
+    <div class="builder-section default-section">
+        <div class="section-top-bar">
+            <span class="section-label">I. PATIENT INFORMATION</span>
+        </div>
+
+        <div class="field-item">
+            <span class="field-name">Name</span>
+            <span class="field-badge">Text</span>
+        </div>
+        <div class="field-item">
+            <span class="field-name">Age</span>
+            <span class="field-badge">Number</span>
+        </div>
+    </div>
+
+    <button id="btn-save-questionnaire" style="margin-top:20px; padding:10px 20px; background:#28a745; color:#fff; border:none; border-radius:5px;">
+        Save Questionnaire
+    </button>
+</div>
+
+<script>
+// ✅ ADD NEW SECTION (CUSTOM ONLY)
+document.getElementById("add-section-btn").addEventListener("click", () => {
+    let sectionName = prompt("Enter section name:");
+    if (!sectionName) return;
+
+    const container = document.querySelector(".builder-container");
+
+    const newSection = document.createElement("div");
+    newSection.classList.add("builder-section");
+
+    newSection.innerHTML = `
+        <div class="section-top-bar">
+            <span class="section-label">${sectionName}</span>
+            <div class="section-actions">
+                <span class="box-delete">🗑️</span>
+            </div>
+        </div>
+
+        <button class="btn-add-dashed section-add-field">
+            Add Field
+        </button>
+    `;
+
+    container.insertBefore(newSection, document.getElementById("btn-save-questionnaire"));
+});
+
+// ✅ ADD FIELD (ONLY FOR CUSTOM SECTIONS)
+document.addEventListener("click", (e) => {
+    if (!e.target.classList.contains("section-add-field")) return;
+
+    const section = e.target.closest(".builder-section");
+
+    if (section.classList.contains("default-section")) {
+        alert("You cannot add fields to Patient Information.");
+        return;
+    }
+
+    const fieldName = prompt("Enter field name (e.g., Weight):");
+    if (!fieldName) return;
+
+    // ✅ Controlled type selection
+    let typeChoice = prompt(
+`Choose field type:
+1 - Text
+2 - Number
+3 - Date`
+    );
+
+    let fieldType = "Text"; // default
+    if (typeChoice === "2") fieldType = "Number";
+    else if (typeChoice === "3") fieldType = "Date";
+
+    const fieldItem = document.createElement("div");
+    fieldItem.classList.add("field-item");
+    fieldItem.innerHTML = `
+        <span class="field-name">${fieldName}</span>
+        <span class="field-badge">${fieldType}</span>
+    `;
+
+    section.insertBefore(fieldItem, e.target);
+});
+
+// ✅ DELETE SECTION (BLOCK DEFAULT)
+document.addEventListener("click", (e) => {
+    if (!e.target.classList.contains("box-delete")) return;
+
+    const section = e.target.closest(".builder-section");
+
+    if (section.classList.contains("default-section")) {
+        alert("You cannot delete Patient Information.");
+        return;
+    }
+
+    if (confirm("Delete this section?")) {
+        section.remove();
+    }
+});
+
+// ✅ SAVE QUESTIONNAIRE (ONLY CUSTOM SECTIONS)
+document.getElementById("btn-save-questionnaire").addEventListener("click", async () => {
+    const sections = document.querySelectorAll(".builder-section");
+    let questionnaire = [];
+
+    sections.forEach(section => {
+        // Skip default section
+        if (section.classList.contains("default-section")) return;
+
+        let section_label = section.querySelector(".section-label").innerText;
+        let fields = [];
+
+        section.querySelectorAll(".field-item").forEach(f => {
+            fields.push({
+                name: f.querySelector(".field-name").innerText,
+                type: f.querySelector(".field-badge").innerText
+            });
+        });
+
+        // Only save sections with at least one field
+        if (fields.length > 0) {
+            questionnaire.push({
+                section: section_label,
+                fields: fields
+            });
+        }
+    });
+
+    if (questionnaire.length === 0) {
+        alert("No new sections to save!");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/save_questionnaire", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questionnaire })
+        });
+
+        const result = await res.json();
+        alert(result.message || result.error);
+
+        // 🔥 RESET ONLY CUSTOM SECTIONS
+        document.querySelectorAll(".builder-section").forEach(s => {
+            if (!s.classList.contains("default-section")) s.remove();
+        });
+
+    } catch (err) {
+        alert("Error saving questionnaire: " + err);
+    }
+});
+</script>
+</body>
+</html>
